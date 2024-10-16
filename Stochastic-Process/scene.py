@@ -1,51 +1,95 @@
 # Plot sample paths
+import random
+from random import sample
+
 import numpy as np
 from manim import *
 
 # set the random seed
 np.random.seed(0)
+random.seed(0)
+
+
+class RandomWalk(ThreeDScene):
+    def construct(self):
+        path = VMobject()
+        dot = Dot3D()
+
+        path.set_points_as_corners([dot.get_center(), dot.get_center()])
+
+        def update_path(path):
+            previous_path = path.copy()
+            previous_path.add_points_as_corners([dot.get_center()])
+            path.become(previous_path)
+
+        path.add_updater(update_path)
+        self.add(path, dot)
+        for i in range(10):
+            # get random direction
+            direction = sample([UP, DOWN, LEFT, RIGHT], 1)[0]
+            size = random.uniform(0.05, 0.5)
+            # move of a fraction of unit in the direction
+            self.play(dot.animate.shift(direction * size), run_time=0.01)
+        self.play(FadeOut(path))
+
+        axes = ThreeDAxes()
+        self.play(Create(axes))
+        self.wait(0.5)
+        self.move_camera(phi=75 * DEGREES, theta=30 * DEGREES, zoom=1, run_time=1.5)
+        # built-in updater which begins camera rotation
+        self.begin_ambient_camera_rotation(rate=0.15)
+
+        path = VMobject()
+        path.set_points_as_corners([dot.get_center(), dot.get_center()])
+        path.add_updater(update_path)
+        self.add(path)
+        for i in range(10):
+            direction = sample([UP, DOWN, LEFT, RIGHT, OUT, IN], 1)[0]
+            self.play(dot.animate.shift(direction), run_time=0.01)
+
+        self.wait(2)
+
+
+def normal_distribution(x, mu=0, sigma=1):
+    return 1 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
 
 
 class MovingNormalDistribution(ThreeDScene):
     def construct(self):
-        # Set up axes
-        axes = ThreeDAxes(
-            x_range=[-3, 3, 1],
-            y_range=[-3, 3, 1],
-            z_range=[0, 1, 0.2],
-            x_length=6,
-            y_length=6,
-            z_length=3,
+        axes = ThreeDAxes()
+
+        # plot the normal distribution
+        normal_dist = ParametricFunction(
+            lambda t: np.array([t, 0, normal_distribution(t)]),
+            t_range=[-6, 6],
+            color=BLUE,
         )
+        self.set_camera_orientation(phi=90 * DEGREES, theta=90 * DEGREES)
 
-        # Create the normal distribution function
-        def normal_distribution(x, y):
-            return np.exp(-0.5 * (x**2 + y**2)) / (2 * np.pi)
+        g = VGroup(axes, normal_dist)
+        self.play(Create(g))
+        self.wait(1)
 
-        # Define a Surface representing the 2D normal distribution
-        surface = Surface(
-            lambda u, v: axes.c2p(u, v, normal_distribution(u, v)),
-            u_range=[-3, 3],
-            v_range=[-3, 3],
-            resolution=(30, 30),
-            fill_opacity=0.7,
-            checkerboard_colors=[BLUE_D, BLUE_E],
+        # add mobject with the plot
+
+        # self.play(Create(axes))
+        # # animate the plot
+
+        self.wait(1)
+        self.move_camera(phi=60 * DEGREES, theta=-45 * DEGREES)
+        self.wait(1)
+
+        x = ValueTracker(0)
+        surface = always_redraw(
+            lambda: Surface(
+                lambda u, v: np.array([u, v, normal_distribution(u, sigma=1 + v / 2)]),
+                v_range=[-x.get_value(), x.get_value()],
+                u_range=[-6, 6],
+            )
         )
-
-        # Add the axes and surface to the scene
-        self.set_camera_orientation(phi=75 * DEGREES, theta=-45 * DEGREES)
-        self.add(axes, surface)
-
-        # Animation to move the normal distribution along the z-axis
-        self.play(surface.animate.shift(UP * 2))
-
-        # Rotate the camera around to show the 3D effect
-        self.play(self.camera.animate.set_phi(60 * DEGREES).set_theta(-90 * DEGREES))
-        self.wait()
-
-        # Bring the surface back to its original position
-        self.play(surface.animate.shift(DOWN * 2))
-        self.wait()
+        self.play(Create(surface))
+        self.wait(1)
+        self.play(x.animate.set_value(3), run_time=3)
 
 
 class StochasticProcess(Scene):

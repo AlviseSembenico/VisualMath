@@ -4,14 +4,22 @@ from random import sample
 
 import numpy as np
 from manim import *
+from manim_voiceover import VoiceoverScene
+from manim_voiceover.services.azure import AzureService
 
 # set the random seed
 np.random.seed(0)
 random.seed(0)
 
 
-class RandomWalk(ThreeDScene):
+class RandomWalk(VoiceoverScene, ThreeDScene):
     def construct(self):
+        self.set_speech_service(
+            AzureService(
+                voice="en-US-AndrewMultilingualNeural",
+                style="newscast-casual",
+            )
+        )
         path = VMobject()
         dot = Dot3D()
 
@@ -23,13 +31,19 @@ class RandomWalk(ThreeDScene):
             path.become(previous_path)
 
         path.add_updater(update_path)
-        self.add(path, dot)
-        for i in range(10):
-            # get random direction
-            direction = sample([UP, DOWN, LEFT, RIGHT], 1)[0]
-            size = random.uniform(0.05, 0.5)
-            # move of a fraction of unit in the direction
-            self.play(dot.animate.shift(direction * size), run_time=0.01)
+        with self.voiceover(text="Imagine a dot in a 2d world") as tracker:
+            self.add(path, dot)
+        with self.voiceover(
+            text="""Let it move randomly in the 4 possible directions
+                """
+        ) as tracker:
+            for i in range(200):
+                # get random direction
+                direction = sample([UP, DOWN, LEFT, RIGHT], 1)[0]
+                size = random.uniform(0.05, 0.5)
+                # move of a fraction of unit in the direction
+                self.play(dot.animate.shift(direction * size), run_time=0.01)
+        # with self.voiceover(text="This circle is drawn as I speak.") as tracker:
         self.play(FadeOut(path))
 
         axes = ThreeDAxes()
@@ -60,7 +74,7 @@ class MovingNormalDistribution(ThreeDScene):
 
         # plot the normal distribution
         normal_dist = ParametricFunction(
-            lambda t: np.array([t, 0, normal_distribution(t)]),
+            lambda t: np.array([t, 0, normal_distribution(t, sigma=0.2)]),
             t_range=[-6, 6],
             color=BLUE,
         )
@@ -76,13 +90,19 @@ class MovingNormalDistribution(ThreeDScene):
         # # animate the plot
 
         self.wait(1)
-        self.move_camera(phi=60 * DEGREES, theta=-45 * DEGREES)
+        self.move_camera(phi=60 * DEGREES, theta=-45 * DEGREES, zoom=2)
         self.wait(1)
 
         x = ValueTracker(0)
         surface = always_redraw(
             lambda: Surface(
-                lambda u, v: np.array([u, v, normal_distribution(u, sigma=1 + v / 2)]),
+                lambda u, v: np.array(
+                    [
+                        u,
+                        v,
+                        normal_distribution(u, mu=abs(v) / 2, sigma=0.2 + abs(v) / 2),
+                    ]
+                ),
                 v_range=[-x.get_value(), x.get_value()],
                 u_range=[-6, 6],
             )
@@ -105,7 +125,7 @@ class StochasticProcess(Scene):
             r"""
             A \textbf{stochastic process} is a collection of random variables \\
             $\{ X_t : t \in T \}$ defined on a common probability space, \\
-            where $T$ represents the index set (often time).
+            where $T$ represents the index set.
         """,
             font_size=36,
         )
@@ -128,7 +148,7 @@ class StochasticProcess(Scene):
         time_label.next_to(time_line, DOWN)
         setting = Tex(
             r"""Fixing an $\omega \in \Omega$ \\
-                        we can trace a path, o realization of the process
+                        we can trace a path, of the process
                       """,
             font_size=24,
         )
@@ -151,7 +171,7 @@ class StochasticProcess(Scene):
             ReplacementTransform(time_line, axes),
             FadeOut(time_label),
             Write(labels),
-            setting.animate.to_edge(UP),
+            FadeOut(setting),
         )
         self.wait(2)
 
@@ -199,9 +219,9 @@ class StochasticProcess(Scene):
         self.play(FadeOut(filtration))
         adapted = Tex(
             r"""
-            Intuitively,  process $\{ X_t : t \in T \}$ if $\mathcal{F}_t$-measurable \\
+            Intuitively, a process $\{ X_t : t \in T \}$ if $\mathcal{F}_t$-measurable \\
                 if the value of $X_t$ can be determined from the information \\
-                available up to time $t$. Namely $\mathcal{E}[X_t | \mathcal{F}_t]= X_t$.
+                available up to time $t$. Namely $\mathbb{E}[X_t | \mathcal{F}_t]= X_t$.
         """,
             font_size=36,
         )
@@ -234,18 +254,17 @@ class StochasticProcess(Scene):
 
         # Generate a sample path up to time t0
         t0 = 5
-        x_values = np.linspace(0, 10, 100)
-        dt = x_values[1] - x_values[0]
+        x_values = np.linspace(0, 10, 100) + 0.03
         steps = np.random.normal(0, 0.3, size=x_values.shape)
         samples = np.cumsum(steps)
         samples = samples - samples[0]  # Start at zero
 
         # Split the sample path at t0
-        index_t0 = np.searchsorted(x_values, t0)
+        # index_t0 = np.searchsorted(x_values, t0)
+        index_t0 = 50
         x_known = x_values[:index_t0]
         y_known = samples[:index_t0]
         x_future = x_values[index_t0 - 1 :]
-        y_future = samples[index_t0 - 1 :]
 
         # Plot known part of the sample path
         known_path = axes.plot_line_graph(
@@ -267,16 +286,6 @@ class StochasticProcess(Scene):
         self.play(Create(t0_line), Write(t0_label))
         self.wait(1)
 
-        # Indicate known information up to t0
-        info_box = Rectangle(width=4, height=1, color=WHITE)
-        info_box.to_corner(UP + LEFT)
-        info_text = Text(
-            "At time $t_0$, we know $X_t$ for $t \\leq t_0$.", font_size=24
-        )
-        info_text.next_to(info_box.get_center(), DOWN)
-        self.play(Create(info_box), Write(info_text))
-        self.wait(2)
-
         # Plot future possible paths
         num_future_paths = 5
         future_paths = VGroup()
@@ -284,6 +293,7 @@ class StochasticProcess(Scene):
         for i in range(num_future_paths):
             future_steps = np.random.normal(0, 0.3, size=x_future.shape)
             future_samples = np.cumsum(future_steps)
+            future_samples = future_samples - future_samples[0]
             future_samples = future_samples + y_known[-1]
 
             future_path = axes.plot_line_graph(
@@ -297,15 +307,9 @@ class StochasticProcess(Scene):
         self.play(LaggedStartMap(Create, future_paths, lag_ratio=0.2), run_time=3)
         self.wait(2)
 
-        # Emphasize unknown future
-        unknown_text = Text("Future values ($t > t_0$) are unknown.", font_size=24)
-        unknown_text.next_to(info_box.get_center(), DOWN)
-        self.play(ReplacementTransform(info_text, unknown_text))
-        self.wait(2)
-
         # Conclusion
-        conclusion = Text(
-            "An adapted process: \nAt any time $t$, we know $X_s$ for $s \\leq t$.",
+        conclusion = Tex(
+            "An adapted process: at any time $t$, we know $X_s$ for $s \\leq t$.",
             font_size=32,
         )
         conclusion.to_edge(DOWN)
